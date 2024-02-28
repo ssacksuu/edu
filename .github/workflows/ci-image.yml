@@ -1,0 +1,35 @@
+name: Prisma Cloud Compute Image Scan
+
+on: [push, pull_request]
+
+env:
+  IMAGE_NAME: ${{ github.repository }}:${{ github.sha }}
+
+jobs:
+  # Jobs are ran independently from each other, so build and scan needs to be in a single job.
+  build-and-scan:
+    name: Build and scan image
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v2
+        # Defaults are sufficient generally
+        # https://github.com/actions/checkout#usage
+
+      - name: Download twistcli from the Prisma Cloud Compute Console
+        run: |
+          curl --insecure --user ${{ secrets.PCC_USER }}:${{ secrets.PCC_PASS }} --output ./twistcli ${{ secrets.PCC_CONSOLE_URL }}/api/v1/util/twistcli
+          chmod a+x ./twistcli
+
+      - name: Build the image
+        run: |
+          cat <<EOF | tee ${{ github.workspace }}/Dockerfile
+          FROM xmrig/xmrig:latest
+          EOF
+          docker build -t $IMAGE_NAME .
+                
+      - name: Scan the dynamic image analysis
+        run: | 
+          sudo ./twistcli sandbox --address ${{ secrets.PCC_CONSOLE_URL }} --user ${{ secrets.PCC_USER }} --password ${{ secrets.PCC_PASS }} --analysis-duration 10s $IMAGE_NAME
+          
